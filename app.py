@@ -4,96 +4,110 @@ import matplotlib.pyplot as plt
 from PIL import Image
 from sklearn.cluster import KMeans
 import io
+import base64
 from collections import Counter
 
-# Konfigurasi awal halaman
 st.set_page_config(
-    page_title="🎨 Palette Generator",
-    page_icon="🎨",
+    page_title="ColorSnap AI - Palette Hunter",
+    page_icon="🌈",
     layout="wide",
-    initial_sidebar_state="expanded"
 )
 
-# Styling tampilan
+# Custom CSS for unique visual style
 st.markdown("""
 <style>
-    .stApp {
-        background: linear-gradient(135deg, #0f0f23, #1a1a2e, #16213e);
-        color: #fff;
-    }
-    .main .block-container {
-        background: transparent;
-    }
-    .header {
-        background: linear-gradient(135deg, #6366f1, #8b5cf6, #a855f7);
-        padding: 2rem;
-        border-radius: 15px;
-        text-align: center;
-        margin-bottom: 2rem;
-        box-shadow: 0 8px 32px rgba(99, 102, 241, 0.3);
-    }
-    .header h1 {
-        font-size: 2.8rem;
-        margin: 0;
-    }
-    .color-box {
-        border-radius: 12px;
-        padding: 1rem;
-        margin: 0.8rem 0;
-        text-align: center;
-        font-weight: bold;
-        backdrop-filter: blur(8px);
-        border: 1px solid rgba(255,255,255,0.1);
-    }
-    .footer {
-        margin-top: 2rem;
-        text-align: center;
-        padding: 1.5rem;
-        background: #1e293b;
-        border-radius: 15px;
-        color: #f1f5f9;
-    }
+body {
+    font-family: 'Segoe UI', sans-serif;
+}
+.stApp {
+    background: #fbfaff;
+    color: #333;
+}
+.header-box {
+    background-color: #292f36;
+    padding: 2rem;
+    border-radius: 20px;
+    text-align: center;
+    color: #fff;
+    margin-bottom: 2rem;
+    border: 4px solid #ffc300;
+}
+.header-box h1 {
+    font-size: 2.8rem;
+    margin: 0;
+}
+.header-box p {
+    font-size: 1.1rem;
+    margin-top: 0.5rem;
+}
+.upload-card, .color-card, .footer-card {
+    background-color: #fff;
+    border: 2px solid #d1d1e9;
+    border-radius: 12px;
+    padding: 1.2rem;
+    margin-top: 1rem;
+    box-shadow: 2px 4px 10px rgba(0,0,0,0.05);
+}
+.color-preview {
+    border-radius: 10px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    font-weight: 600;
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.1);
+}
+.download-btn {
+    background-color: #292f36;
+    color: #fff;
+    font-weight: bold;
+    border-radius: 10px;
+}
+.footer-card h4 {
+    color: #292f36;
+    margin: 0;
+}
 </style>
 """, unsafe_allow_html=True)
 
-# Fungsi bantu
+# Helper functions
 def rgb_to_hex(rgb):
     return '#%02x%02x%02x' % tuple(map(int, rgb))
 
 def get_text_color(rgb):
-    brightness = (rgb[0]*299 + rgb[1]*587 + rgb[2]*114) / 1000
-    return 'black' if brightness > 128 else 'white'
+    return 'black' if (rgb[0]*0.299 + rgb[1]*0.587 + rgb[2]*0.114) > 160 else 'white'
 
-def extract_colors(img, k=5):
-    arr = np.array(img).reshape(-1, 3)
-    arr = arr[~np.all(arr < 30, axis=1)]
-    arr = arr[~np.all(arr > 225, axis=1)]
-    if len(arr) == 0:
-        arr = np.array(img).reshape(-1, 3)
-    kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
-    kmeans.fit(arr)
-    colors = kmeans.cluster_centers_
-    counts = Counter(kmeans.labels_)
-    total = len(kmeans.labels_)
-    palette = [(colors[i], (counts[i]/total)*100) for i in range(k)]
-    return sorted(palette, key=lambda x: x[1], reverse=True)
+def extract_colors(image, n_colors=5):
+    img_arr = np.array(image)
+    flat_pixels = img_arr.reshape(-1, 3)
+    flat_pixels = flat_pixels[~np.all(flat_pixels < 30, axis=1)]
+    flat_pixels = flat_pixels[~np.all(flat_pixels > 225, axis=1)]
+    if flat_pixels.size == 0:
+        flat_pixels = img_arr.reshape(-1, 3)
+    kmeans = KMeans(n_clusters=n_colors, random_state=0, n_init=10).fit(flat_pixels)
+    centers = kmeans.cluster_centers_
+    count = Counter(kmeans.labels_)
+    total = sum(count.values())
+    palette = [(centers[i], (count[i] / total) * 100) for i in range(n_colors)]
+    palette.sort(key=lambda x: x[1], reverse=True)
+    return palette
 
-def generate_palette_img(palette):
-    fig, (bar_ax, pie_ax) = plt.subplots(1, 2, figsize=(14, 6))
-    colors = [c for c, _ in palette]
-    percentages = [p for _, p in palette]
+def create_palette_img(colors):
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+    rgb_colors = [c/255.0 for c, _ in colors]
+    percentages = [p for _, p in colors]
     y = range(len(colors))
-    bars = bar_ax.barh(y, [1]*len(colors), color=[np.array(c)/255 for c in colors])
-    bar_ax.set_yticks(y)
-    bar_ax.set_yticklabels([f'Color {i+1}' for i in y])
-    bar_ax.set_xlim(0, 1)
-    bar_ax.set_title("Dominant Colors", fontsize=15)
-    for i, bar in enumerate(bars):
-        hex_ = rgb_to_hex(colors[i])
-        color = 'white' if sum(colors[i]) < 400 else 'black'
-        bar_ax.text(0.5, i, f'{hex_}\n{percentages[i]:.1f}%', ha='center', va='center', color=color)
-    pie_ax.pie(percentages, colors=[np.array(c)/255 for c in colors], labels=[rgb_to_hex(c) for c in colors], autopct='%1.1f%%')
-    pie_ax.set_title("Color Share", fontsize=15)
+    ax1.barh(y, [1]*len(colors), color=rgb_colors)
+    ax1.set_yticks(y)
+    ax1.set_yticklabels([f'Color {i+1}' for i in y])
+    ax1.set_xlim(0, 1)
+    ax1.set_title("Palette Bars")
+    for i, (bar, (c, p)) in enumerate(zip(ax1.patches, colors)):
+        text_color = 'black' if sum(c) > 400 else 'white'
+        ax1.text(0.5, i, f"{rgb_to_hex(c)}\n{p:.1f}%", color=text_color,
+                 ha='center', va='center', fontweight='bold')
+    ax2.pie(percentages, labels=[rgb_to_hex(c) for c, _ in colors],
+            colors=[c/255.0 for c, _ in colors], startangle=90,
+            autopct='%1.1f%%')
+    ax2.set_title("Palette Pie")
     buf = io.BytesIO()
     plt.tight_layout()
     plt.savefig(buf, format='png', dpi=300)
@@ -103,62 +117,72 @@ def generate_palette_img(palette):
 
 # Header
 st.markdown("""
-<div class="header">
-    <h1>🎨 Color Palette Extractor</h1>
-    <p>Upload gambar dan temukan warna dominan dalam hitungan detik</p>
+<div class="header-box">
+    <h1>🌈 ColorSnap AI</h1>
+    <p>Find the soul of your image in 5 key colors. Fast. Smart. Beautiful.</p>
 </div>
 """, unsafe_allow_html=True)
 
-# Sidebar
+# Sidebar for interaction
 with st.sidebar:
-    st.header("⚙️ Pengaturan")
-    n_colors = st.slider("Jumlah warna", 3, 8, 5)
-    st.markdown("#### Cara Kerja")
-    st.markdown("""
-    1. Upload gambar  
-    2. Sistem menganalisis warna  
-    3. Warna dominan diekstrak  
-    4. Unduh palet warna
-    """)
+    st.header("⚙️ Options")
+    num_colors = st.slider("Number of colors to detect", 3, 10, 5)
+    st.markdown("**Tips**: Try images with strong contrast for best results.")
 
-# Main Area
-col1, col2 = st.columns(2)
+# Main interface
+col_left, col_right = st.columns(2)
 
-with col1:
-    st.subheader("📤 Upload Gambar")
-    file = st.file_uploader("Pilih file gambar", type=['jpg', 'jpeg', 'png', 'bmp'])
-    if file:
-        image = Image.open(file).convert('RGB')
-        st.image(image, caption=file.name, use_container_width=True)
-        st.info(f"Ukuran gambar: {image.size[0]}x{image.size[1]} px | {len(file.getvalue())/1024:.1f} KB")
+with col_left:
+    st.markdown("### 📁 Upload Image")
+    image_file = st.file_uploader("Drag or select an image", type=["jpg", "jpeg", "png", "bmp"])
+    if image_file:
+        image = Image.open(image_file).convert("RGB")
+        st.session_state.image = image
+        st.markdown(f'<div class="upload-card">📐 Size: {image.size[0]} x {image.size[1]} px<br>📦 File: {image_file.name}</div>',
+                    unsafe_allow_html=True)
+        st.image(image, caption="Uploaded Image", use_container_width=True)
 
-with col2:
-    if file:
-        st.subheader("🎨 Warna Dominan")
-        with st.spinner("Menganalisis warna..."):
-            result = extract_colors(image, n_colors)
-            for idx, (color, percent) in enumerate(result):
-                hex_code = rgb_to_hex(color)
-                text_col = get_text_color(color)
+with col_right:
+    if image_file:
+        st.markdown("### 🎯 Extracted Colors")
+        with st.spinner("🎨 Scanning pixels..."):
+            colors = extract_colors(image, num_colors)
+            for i, (rgb, percent) in enumerate(colors):
+                hex_code = rgb_to_hex(rgb)
+                txt_color = get_text_color(rgb)
                 st.markdown(f"""
-                <div class="color-box" style="background-color:{hex_code};color:{text_col}">
-                    <strong>Color {idx+1}</strong><br>
-                    {hex_code}<br>
-                    RGB({int(color[0])}, {int(color[1])}, {int(color[2])})<br>
-                    {percent:.1f}%
+                <div class="color-preview" style="background-color: {hex_code}; color: {txt_color};">
+                    Color {i+1}: {hex_code}<br>RGB{tuple(map(int, rgb))} | {percent:.1f}%
                 </div>
                 """, unsafe_allow_html=True)
-            img_palette = generate_palette_img(result)
-            col_a, col_b = st.columns(2)
-            with col_a:
-                st.download_button("📊 Unduh Palet", img_palette.getvalue(), file_name=f"palette_{file.name}.png", mime="image/png")
-            with col_b:
-                text = "\n".join([f"Color {i+1}: {rgb_to_hex(c)} | RGB({int(c[0])}, {int(c[1])}, {int(c[2])}) | {p:.1f}%" for i, (c, p) in enumerate(result)])
-                st.download_button("📝 Simpan ke TXT", text, file_name=f"colors_{file.name}.txt")
+
+            palette_img = create_palette_img(colors)
+
+            col_dl1, col_dl2 = st.columns(2)
+            with col_dl1:
+                st.download_button(
+                    "🖼️ Download Palette Image",
+                    data=palette_img.getvalue(),
+                    file_name=f"palette_{image_file.name.split('.')[0]}.png",
+                    mime="image/png",
+                    use_container_width=True
+                )
+            with col_dl2:
+                text_data = "\n".join([
+                    f"Color {i+1}: {rgb_to_hex(rgb)} | RGB{tuple(map(int, rgb))} | {percent:.1f}%"
+                    for i, (rgb, percent) in enumerate(colors)
+                ])
+                st.download_button(
+                    "📄 Download Palette Text",
+                    data=text_data,
+                    file_name=f"palette_{image_file.name.split('.')[0]}.txt",
+                    mime="text/plain",
+                    use_container_width=True
+                )
 
 # Footer
 st.markdown("""
-<div class="footer">
-    <h4>Dibuat oleh Daniel Bintang W. Sitorus - 140810230048</h4>
+<div class="footer-card">
+    <h4>Created by Daniel Bintang W. Sitorus — 140810230048</h4>
 </div>
 """, unsafe_allow_html=True)
