@@ -8,8 +8,8 @@ import io
 
 # 🎨 Page Config
 st.set_page_config(
-    page_title="HueHarvester - Vibe Extractor",
-    page_icon="🧪",
+    page_title="Color Extractor",
+    page_icon="🎨",
     layout="wide",
 )
 
@@ -110,7 +110,7 @@ def create_palette_img(colors):
 # 🎉 HEADER
 st.markdown(f"""
 <div class="container-box">
-    <h1>🧪 HueHarvester</h1>
+    <h1>🎨 Image Exctractor</h1>
     <h3><em>Where your image whispers in colors.</em></h3>
     <p>Upload an image and reveal its secret palette in a bold, styled presentation.</p>
 </div>
@@ -164,6 +164,6 @@ if uploaded_file:
 # 👣 FOOTER
 st.markdown("""
 <div class="footer">
-Created by Daniel Bintang W. Sitorus — NPM 140810230048 • HueHarvester 2025
+Created by Daniel Bintang W. Sitorus — NPM 140810230048
 </div>
 """, unsafe_allow_html=True)
